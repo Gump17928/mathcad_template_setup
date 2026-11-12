@@ -55,6 +55,13 @@ def ask_disciplines() -> list[str]:
     return chosen + [e.strip() for e in extra.split(",") if e.strip()]
 
 
+def ask_starter_csv() -> bool:
+    """Whether to create a starter CSV per discipline. Without one, each discipline gets a blank template."""
+    print("\nEach discipline can start as a blank template (you write the calculations in Mathcad),")
+    print("or from a CSV file that the tool turns into calculations.")
+    return ask("Create a starter CSV file for each discipline? (y/n)", "n").lower().startswith("y")
+
+
 def unique_key(name: str, taken: set[str]) -> str:
     """The discipline's key, made different from every key in `taken` (ELE, EL2, EL3, ...)."""
     base = default_key(name) or "XXX"
@@ -65,16 +72,25 @@ def unique_key(name: str, taken: set[str]) -> str:
     return key
 
 
-def discipline_entries(names: list[str]) -> list[dict]:
+def discipline_entries(names: list[str], starter_csv: bool = False) -> list[dict]:
+    """The `disciplines` list for project.json; entries get a `csv` path only when a starter CSV was asked for."""
     taken: set[str] = set()
-    return [{"name": n, "key": unique_key(n, taken), "csv": f"calcs/{folder_name(n)}.csv"} for n in names]
+    entries = []
+    for name in names:
+        entry = {"name": name, "key": unique_key(name, taken)}
+        if starter_csv:
+            entry["csv"] = f"calcs/{folder_name(name)}.csv"
+        entries.append(entry)
+    return entries
 
 
 def create_project(folder: Path, info: dict, disciplines: list[dict]) -> None:
-    """Write project.json and a starter CSV for each discipline into a new project folder."""
-    (folder / "calcs").mkdir(parents=True)
+    """Write project.json, and a starter CSV for each discipline that has a `csv` path, into a new folder."""
+    folder.mkdir(parents=True)
     for d in disciplines:
-        (folder / d["csv"]).write_text(STARTER_CSV, encoding="utf-8")
+        if "csv" in d:
+            (folder / d["csv"]).parent.mkdir(exist_ok=True)
+            (folder / d["csv"]).write_text(STARTER_CSV, encoding="utf-8")
     config = {"project": info, "master_file": "Master", "disciplines": disciplines}
     (folder / "project.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
 
@@ -86,17 +102,24 @@ def main() -> None:
     names = ask_disciplines()
     if not names:
         sys.exit("\nNo disciplines chosen - nothing created.")
+    starter_csv = ask_starter_csv()
 
     folder = PROJECTS / folder_name(info["number"] if info["number"] != DEFAULT_PROJECT_NUMBER else info["name"])
     if folder.exists():
         sys.exit(f"\nA project folder named '{folder.name}' already exists. Pick a different project number or name.")
-    create_project(folder, info, discipline_entries(names))
+    create_project(folder, info, discipline_entries(names, starter_csv))
 
     print(f"\nCreated {folder}")
     print("\nNext steps:")
-    print(f"  1. Open the CSV files in {folder / 'calcs'} (Excel works)")
-    print("     and replace the starter rows with your calculations.")
-    print("  2. Double-click build.bat and choose this project.")
+    if starter_csv:
+        print(f"  1. Open the CSV files in {folder / 'calcs'} (Excel works)")
+        print("     and replace the starter rows with your calculations.")
+        print("  2. Double-click build.bat and choose this project.")
+    else:
+        print("  1. Double-click build.bat and choose this project. It creates a blank template per discipline.")
+        print("  2. Open each discipline worksheet in Mathcad Prime and write the calculations there.")
+        print("  3. Select the key results and use Input/Output > Assign Outputs, then save.")
+        print("  4. Run build.bat again: your worksheets are kept, and the master's summary picks up the outputs.")
 
 
 if __name__ == "__main__":

@@ -123,9 +123,10 @@ def definition_xml(name: str, expr: str, unit: str = "") -> str:
     return f"<ml:define>{_identifier_xml(name, contextual=False)}{value}</ml:define>"
 
 
-def evaluation_xml(name: str, unit: str = "") -> str:
-    """`name =` showing the result, in `unit` if given or in the result's own units otherwise."""
-    override = unit_xml(unit) if unit else "<ml:placeholder />"
+def evaluation_xml(name: str, unit: str = "", override_xml: str = "") -> str:
+    """`name =` showing the result: in `unit` if given, in the unit settings copied as `override_xml` from another
+    worksheet if given, or otherwise in the result's own units."""
+    override = override_xml or (unit_xml(unit) if unit else "<ml:placeholder />")
     return f"<ml:eval>{_identifier_xml(name)}<ml:unitOverride>{override}</ml:unitOverride></ml:eval>"
 
 
@@ -342,9 +343,10 @@ class Sheet:
         self.record_definition(body)
         return self._math_in_flow(body, left, tag)
 
-    def evaluate(self, name: str, unit: str = "", *, left: float = LEFT_MARGIN, tag: str | None = None) -> int:
+    def evaluate(self, name: str, unit: str = "", *, left: float = LEFT_MARGIN, tag: str | None = None,
+                 override_xml: str = "") -> int:
         """Add `name =` (shows the result) at the current position."""
-        return self._math_in_flow(evaluation_xml(name, unit), left, tag)
+        return self._math_in_flow(evaluation_xml(name, unit, override_xml), left, tag)
 
     # -- areas
     def area_from_frame(self, tag: str, frame: Frame) -> None:
@@ -362,28 +364,36 @@ class Sheet:
         self.y = snap(self.y + height + GRID)
 
     # -- includes
-    def include(self, href: str, source: Sheet) -> None:
+    def include(self, href: str, source: Sheet | None = None) -> None:
         """Include another worksheet (its definitions become available below this point).
 
-        Prime refuses to open a worksheet with an include unless the package also holds a cached copy of the
-        included definitions and the reference carries a last-saved-date, so both are generated here from `source`.
+        Prime refuses to open a worksheet with an include whose reference has no last-saved-date, so that is
+        always written.
+
+        With `source`, a cached copy of that sheet's definitions is stored in the package too. Prime then uses the
+        cache and does not re-read the file when this worksheet is opened (the include's refresh button does).
+        Without `source` there is no cache, so Prime reads the live file on open - which is what a worksheet written
+        by hand needs, since its definitions are not known here.
         """
         region_id = self.next_region_id()
         self.ensure_space(INCLUDE_REGION_HEIGHT)
-        part = f"/mathcad/include/include{region_id}.xml"
-        cached = [
-            f'<region region-id="{i}" actualWidth="0" actualHeight="0" top="{CACHED_ROW_SPACING * (i + 1):.1f}" '
-            f'left="{LEFT_MARGIN}"><math resultRef="{self.next_result_id()}">{body}</math></region>'
-            for i, body in enumerate(source.definitions)
-        ]
-        self.includes[part] = cached_worksheet_xml(cached).encode("utf-8")
-        relationship = Relationship(new_relationship_id(), REL_INCLUDE, part)
-        self.relationships.append(relationship)
+        item_reference = ""
+        if source is not None:
+            part = f"/mathcad/include/include{region_id}.xml"
+            cached = [
+                f'<region region-id="{i}" actualWidth="0" actualHeight="0" top="{CACHED_ROW_SPACING * (i + 1):.1f}" '
+                f'left="{LEFT_MARGIN}"><math resultRef="{self.next_result_id()}">{body}</math></region>'
+                for i, body in enumerate(source.definitions)
+            ]
+            self.includes[part] = cached_worksheet_xml(cached).encode("utf-8")
+            relationship = Relationship(new_relationship_id(), REL_INCLUDE, part)
+            self.relationships.append(relationship)
+            item_reference = f' item-idref="{relationship.id}"'
         self.regions.append(
             f'<region region-id="{region_id}" width="{AREA_WIDTH}" actualWidth="{AREA_WIDTH}" '
             f'actualHeight="{INCLUDE_REGION_HEIGHT}" top="{self.abs_y:.4f}" left="0">'
-            f'<reference href={quoteattr(href)} last-saved-date="{datetime.now():%m/%d/%Y %H:%M:%S}" '
-            f'item-idref="{relationship.id}" /></region>'
+            f'<reference href={quoteattr(href)} last-saved-date="{datetime.now():%m/%d/%Y %H:%M:%S}"'
+            f'{item_reference} /></region>'
         )
         self.y = snap(self.y + INCLUDE_REGION_HEIGHT + GRID)
 

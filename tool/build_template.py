@@ -2,20 +2,40 @@
 
     python build_template.py [project folder] [--open]
 
-Reads <project>/project.json and the CSV named for each discipline, and writes <project>/output/*.mcdx:
-one worksheet per discipline plus a master worksheet (title page, contents, combined summary).
+Reads <project>/project.json and writes <project>/output/*.mcdx: one worksheet per discipline plus a master
+worksheet (title page, contents, combined summary). A discipline with a CSV is generated from it every time;
+a discipline without one gets a blank template the first time, which is then left alone so that calculations
+written in Prime are never overwritten.
 """
 from __future__ import annotations
 
-import json
 import os
 import sys
-from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+from blank_template import (
+    BLANK_SECTION_TAG,
+    BLANK_SECTION_TITLE,
+    find_name_clashes,
+    place_designated_outputs,
+    write_blank_discipline,
+)
 from csv_import import CsvError, DisciplineModel, Row, RowKind, Section, SummaryKind, load_discipline
 from mcdx_build import GRID, MATH_REGION_HEIGHT, TOP_MARGIN, Frame, IoKind, Sheet, snap
-from project_io import default_file_name, default_key, resolve_project
+from mcdx_results import DesignatedOutput
+from page_parts import (
+    FULL_WIDTH,
+    MASTER_CONTENTS_TAG,
+    SUMMARY_LABEL_WIDTH,
+    SUMMARY_MIN_SPACE,
+    SUMMARY_TAG,
+    SUMMARY_VALUE_X,
+    TITLE_TAG,
+    add_header_and_footer,
+    add_title_block,
+)
+from project_config import Discipline, ProjectConfig, ProjectError, ProjectInfo, load_project
+from project_io import resolve_project
 from rich_text import Run, text_height
 
 # ---- layout of a calculation block, in px (positions are relative to the Area that holds the block)
@@ -28,99 +48,10 @@ ROW_PADDING = 8.0            # space under each row
 NOTE_GAP = 2.0               # space between a row and its note
 MAX_AREA_HEIGHT = 700.0      # an Area cannot split across pages; leaves room for the section heading above it
 HEADING_ALLOWANCE = 60.0     # space kept for a section heading when deciding if the first Area fits on the page
-SUMMARY_MIN_SPACE = 200.0    # start a new page for a summary when less than this is left
-SUMMARY_LABEL_WIDTH = 260
-SUMMARY_VALUE_X = 320
-FULL_WIDTH = 700
-TITLE_WIDTH = 740
 
-TITLE_TAG = "top"                # every discipline sheet's title block; "Back to contents" links here
-MASTER_CONTENTS_TAG = "contents"
-SUMMARY_TAG = "summary"
 MISSING_PAGE = "?"
-
-
-class ProjectError(Exception):
-    """A problem in project.json that the user can fix; the message says what."""
-
-
-# ---------------------------------------------------------------- project.json
-@dataclass(frozen=True)
-class ProjectInfo:
-    """The `project` block of project.json: what appears on every title block and header."""
-    name: str
-    number: str
-    revision: str
-    client: str
-    author: str
-    date: str
-
-
-@dataclass(frozen=True)
-class Discipline:
-    """One entry of the `disciplines` list in project.json."""
-    name: str
-    key: str                  # prefix for variable names, e.g. ELE -> ELE_I_design
-    file: str                 # worksheet file name without extension
-    csv: str                  # path relative to the project folder
-    section_titles: dict = field(default_factory=dict)
-    summary: list | None = None  # variables to list in the summary; None = all live formulas
-
-
-@dataclass(frozen=True)
-class ProjectConfig:
-    info: ProjectInfo
-    master_file: str
-    disciplines: list[Discipline]
-
-
-def load_project(folder: Path) -> ProjectConfig:
-    """Read and validate <folder>/project.json, filling in defaults for anything optional."""
-    try:
-        raw = json.loads((folder / "project.json").read_text(encoding="utf-8-sig"))
-    except json.JSONDecodeError as e:
-        message = f"project.json is not valid JSON: {e}  (check commas and quotes near line {e.lineno})"
-        raise ProjectError(message) from e
-    for key in ("project", "disciplines"):
-        if key not in raw:
-            raise ProjectError(f"project.json is missing '{key}'")
-
-    info = ProjectInfo(**{f.name: raw["project"].get(f.name, "") for f in fields(ProjectInfo)})
-    disciplines, seen_keys, seen_files = [], set(), set()
-    for d in raw["disciplines"]:
-        if "name" not in d or "csv" not in d:
-            raise ProjectError("every discipline needs a 'name' and a 'csv' path in project.json")
-        discipline = Discipline(
-            name=d["name"],
-            key=d.get("key") or default_key(d["name"]),
-            file=d.get("file") or default_file_name(d["name"]),
-            csv=d["csv"],
-            section_titles=d.get("section_titles", {}),
-            summary=d.get("summary"),
-        )
-        if discipline.key in seen_keys or discipline.file in seen_files:
-            raise ProjectError(f"discipline '{discipline.name}' repeats a key or file name; they must be unique")
-        seen_keys.add(discipline.key)
-        seen_files.add(discipline.file)
-        disciplines.append(discipline)
-    return ProjectConfig(info, raw.get("master_file", "Master"), disciplines)
-
-
-# ---------------------------------------------------------------- shared page furniture
-def add_header_and_footer(sheet: Sheet, info: ProjectInfo, page_title: str) -> None:
-    sheet.header_text(f"{info.name} - {page_title}")
-    sheet.footer_text(f"{info.number}  Rev {info.revision}")
-
-
-def add_title_block(sheet: Sheet, info: ProjectInfo, heading: str, subtitle: str) -> None:
-    """Title, subtitle and project details at the top of a sheet. The title carries the TITLE_TAG link target."""
-    sheet.text(heading, style="Title", tag=TITLE_TAG, width=TITLE_WIDTH)
-    sheet.text(subtitle, style="Subtitle", width=TITLE_WIDTH)
-    sheet.skip(10)
-    sheet.text(f"Project: {info.name}   ({info.number})")
-    if info.client:
-        sheet.text(f"Client: {info.client}")
-    sheet.text(f"Revision: {info.revision}      Date: {info.date}      Author: {info.author}")
+MASTER_SUMMARY_NOTE = ("Values below come from each discipline worksheet through Include regions. "
+                       "After changing a discipline file, click the refresh button on its Include to update them.")
 
 
 # ---------------------------------------------------------------- calculation rows
@@ -231,9 +162,12 @@ def build_discipline(d: Discipline, model: DisciplineModel, info: ProjectInfo, m
 
 
 def build_master(cfg: ProjectConfig, models: dict[str, DisciplineModel], pages_by_file: dict[str, dict[str, int]],
-                 sheets: dict[str, Sheet]) -> Sheet:
-    """Title page, contents linking into every discipline sheet, and a combined summary. The summary values come
-    from Include regions, so the master recalculates from the discipline files."""
+                 sheets: dict[str, Sheet], outputs_by_file: dict[str, list[DesignatedOutput]]) -> Sheet:
+    """Title page, contents linking into every discipline sheet, and a combined summary fed by Include regions.
+
+    A discipline in `models` came from a CSV; any other is a blank template whose calculations were written in
+    Prime, so its summary lines are the outputs designated in its file (`outputs_by_file`).
+    """
     sheet = Sheet()
     add_header_and_footer(sheet, cfg.info, "Master")
     add_title_block(sheet, cfg.info, cfg.info.name, "Engineering Calculation Package")
@@ -241,22 +175,29 @@ def build_master(cfg: ProjectConfig, models: dict[str, DisciplineModel], pages_b
 
     sheet.text("Contents", style="Heading 1", tag=MASTER_CONTENTS_TAG)
     for d in cfg.disciplines:
-        pages = pages_by_file[d.file]
         sheet.skip(10)
         sheet.text([Run(d.name, f"{d.file}.mcdx#{TITLE_TAG}")], style="Heading 2")
-        for section in models[d.file].sections:
-            sheet.text(["      ", Run(section.title, f"{d.file}.mcdx#{section.tag}"), page_note(pages, section.tag)])
+        if d.file in models:
+            for section in models[d.file].sections:
+                note = page_note(pages_by_file[d.file], section.tag)
+                sheet.text(["      ", Run(section.title, f"{d.file}.mcdx#{section.tag}"), note])
+        else:  # page numbers are omitted: the file will change once someone writes calculations in it
+            sheet.text(["      ", Run(BLANK_SECTION_TITLE, f"{d.file}.mcdx#{BLANK_SECTION_TAG}")])
     sheet.skip(10)
     sheet.text([Run("Combined summary", f"#{SUMMARY_TAG}")], style="Heading 2")
     sheet.page_break()
 
     sheet.text("Combined summary", style="Heading 1", tag=SUMMARY_TAG)
-    sheet.text("Values below are read live from each discipline worksheet through Include regions.")
+    sheet.text(MASTER_SUMMARY_NOTE)
     for d in cfg.disciplines:
         sheet.ensure_space(SUMMARY_MIN_SPACE)
         sheet.text([Run(d.name, f"{d.file}.mcdx#{SUMMARY_TAG}")], style="Heading 2")
-        sheet.include(f"{d.file}.mcdx", sheets[d.file])
-        place_summary(sheet, models[d.file])
+        if d.file in models:
+            sheet.include(f"{d.file}.mcdx", sheets[d.file])
+            place_summary(sheet, models[d.file])
+        else:
+            sheet.include(f"{d.file}.mcdx")  # no cached copy: Prime then reads the live file
+            place_designated_outputs(sheet, d, outputs_by_file[d.file])
     return sheet
 
 
@@ -272,40 +213,53 @@ def describe(d: Discipline, model: DisciplineModel) -> list[str]:
 
 def lay_out_discipline_sheets(cfg: ProjectConfig, models: dict[str, DisciplineModel]
                               ) -> tuple[dict[str, Sheet], dict[str, dict[str, int]]]:
-    """Lay out every discipline sheet. Contents pages quote page numbers that are only known once a sheet has
-    been laid out, so each sheet is built twice and the second pass uses the numbers found in the first."""
+    """Lay out the sheet of every CSV discipline. Contents pages quote page numbers that are only known once a
+    sheet has been laid out, so each sheet is built twice and the second pass uses the numbers found in the first."""
     pages_by_file: dict[str, dict[str, int]] = {}
     sheets: dict[str, Sheet] = {}
     for _ in range(2):
         for d in cfg.disciplines:
-            sheet = build_discipline(d, models[d.file], cfg.info, cfg.master_file, pages_by_file.get(d.file, {}))
-            pages_by_file[d.file] = sheet.tags
-            sheets[d.file] = sheet
+            if d.file in models:
+                sheet = build_discipline(d, models[d.file], cfg.info, cfg.master_file, pages_by_file.get(d.file, {}))
+                pages_by_file[d.file] = sheet.tags
+                sheets[d.file] = sheet
     return sheets, pages_by_file
 
 
 def build_project(folder: Path) -> list[Path]:
-    """Build every worksheet for the project in `folder`. Returns the files written."""
+    """Build every worksheet for the project in `folder`. Returns the files in the output folder."""
     cfg = load_project(folder)
     out = folder / "output"
 
-    models, report = {}, []
+    models: dict[str, DisciplineModel] = {}
+    report: dict[str, list[str]] = {}
     for d in cfg.disciplines:
-        models[d.file] = load_discipline(folder / d.csv, d.key + "_", d.section_titles, d.summary)
-        report += describe(d, models[d.file])
+        if d.csv:
+            models[d.file] = load_discipline(folder / d.csv, d.key + "_", d.section_titles, d.summary)
+            report[d.file] = describe(d, models[d.file])
 
     sheets, pages_by_file = lay_out_discipline_sheets(cfg, models)
-    master = build_master(cfg, models, pages_by_file, sheets)
 
-    written = []
+    written: list[Path] = []
+    outputs: dict[str, list[DesignatedOutput]] = {}
     for d in cfg.disciplines:
-        sheets[d.file].save(out / f"{d.file}.mcdx")
         written.append(out / f"{d.file}.mcdx")
-    master.save(out / f"{cfg.master_file}.mcdx")
-    written.append(out / f"{cfg.master_file}.mcdx")
+        if d.file in models:
+            sheets[d.file].save(written[-1])
+        else:
+            outputs[d.file], report[d.file] = write_blank_discipline(d, cfg, out)
 
-    (out / "import_report.txt").write_text("\n".join(report) + "\n", encoding="utf-8")
-    print("\n".join(report))
+    master = out / f"{cfg.master_file}.mcdx"
+    build_master(cfg, models, pages_by_file, sheets, outputs).save(master)
+    written.append(master)
+
+    names = {file: {r.name for s in m.sections for r in s.rows if r.name} for file, m in models.items()}
+    names.update({file: {o.variable for o in found} for file, found in outputs.items()})
+    lines = [line for d in cfg.disciplines for line in report[d.file]]
+    lines += [f"note: {clash}" for clash in find_name_clashes(names)]
+
+    (out / "import_report.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print("\n".join(lines))
     return written
 
 
@@ -318,7 +272,7 @@ def main() -> None:
         files = build_project(folder)
     except (ProjectError, CsvError) as e:
         sys.exit(f"\nERROR: {e}")
-    print("\nCreated:")
+    print("\nFiles in the output folder:")
     for f in files:
         print(f"  {f}")
     if "--open" in sys.argv:

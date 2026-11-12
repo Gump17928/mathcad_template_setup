@@ -2,10 +2,13 @@
 
 Sets up a linked package of Mathcad Prime worksheets for a project:
 
-- **One worksheet per discipline** (Structural, Electrical, ...): title block, contents with links, one section per calculation, summary.
-- **A master worksheet**: title page, contents that link into every discipline file, and a combined summary that reads live values from each discipline file.
+- **One worksheet per discipline** (Structural, Electrical, ...): title block, contents with links, a calculation area and a summary.
+- **A master worksheet**: title page, contents that link into every discipline file, and a combined summary that pulls in the results from each discipline file.
 
-You describe each discipline's calculation in a **CSV file** (Excel can edit it). No programming needed.
+There are two ways to fill a discipline, and you can mix them in one project:
+
+- **Blank template (the default).** The tool creates an empty discipline worksheet and you write the calculations in Mathcad Prime yourself. Nothing else is needed. The master's summary lists whichever results you mark as outputs.
+- **From a CSV file** (Excel can edit it). The tool turns each row into Mathcad inputs, formulas and notes. See "The CSV format" below. Handy when calculations come out of another tool, but never required.
 
 ## First-time setup (once per PC)
 
@@ -20,20 +23,29 @@ Building the worksheets does not need Prime.
 
 | Step | What to do |
 |---|---|
-| 1. New project | Double-click **`new_project.bat`** and answer the questions. It creates `projects\<project>\` with a starter CSV per discipline. |
-| 2. Fill in the calculations | Open `projects\<project>\calcs\<Discipline>.csv` in Excel and replace the starter rows (format below). |
-| 3. Build | Double-click **`build.bat`** (pick the project if asked). The worksheets appear in `projects\<project>\output\`; the folder opens for you. |
-| 4. Open | Double-click `Master.mcdx` in Prime. Ctrl+Click a link to jump. |
+| 1. New project | Double-click **`new_project.bat`** and answer the questions. When asked about starter CSV files, answer `n` for blank templates (default) or `y` to get a CSV per discipline. |
+| 2. Build | Double-click **`build.bat`** (pick the project if asked). The worksheets appear in `projects\<project>\output\`; the folder opens for you. |
+| 3. Write the calculations | **Blank template:** open each discipline worksheet in Prime and write your calculations there. Select each key result and use *Input/Output > Assign Outputs*, then save. **CSV:** edit `projects\<project>\calcs\<Discipline>.csv` in Excel (format below) and build again. |
+| 4. Build again | Run **`build.bat`** again whenever you like. The master is rebuilt and picks up your designated outputs. |
+| 5. Open | Double-click `Master.mcdx` in Prime. Ctrl+Click a link to jump. |
 | Optional | **`check_in_prime.bat`** opens everything in Prime and lists the calculated results. **`make_pdfs.bat`** writes PDFs to `projects\<project>\pdf\`. |
 
-Rebuilding overwrites the files in `output\`, so keep your edits in the CSVs (or copy a worksheet elsewhere before editing it by hand).
-Close the worksheets in Prime before rebuilding.
+Rebuilding **never overwrites** a discipline worksheet that has no CSV: the blank template is written once, and after that your file is kept (to start over, delete it from `output\` and build again). Worksheets generated from a CSV, and the master, **are** rewritten every time, so keep edits to those in the CSV. Close the worksheets in Prime before rebuilding.
 
-`projects\Example` is a ready-made project (four disciplines; Electrical comes from `example.csv`). Run `build.bat` on it to see the result.
+### How a blank discipline feeds the master
+
+- The master includes each discipline file, and its combined summary lists the **outputs you designated** in that file (with the unit each is shown in). If there are none yet, it says so.
+- Use **unique variable names across disciplines**, for example a discipline prefix such as `STR_` or `ELE_`. The master shares one namespace, so a name defined in two disciplines silently takes the value of the one included last. The build report warns about names that appear as outputs in more than one.
+- The master's contents link to the *Calculations* and *Summary* headings of the blank template. If you restructure the file, keep those headings' tags, or the links won't land.
+- After you change a discipline file, rebuild, or click the refresh button on that Include in the master.
+
+`projects\Example` is a ready-made project (four disciplines, all from CSV files; Electrical comes from `example.csv`). Run `build.bat` on it to see the result.
 
 Git: only the tool, tests and `projects\Example` are tracked. Your own project folders under `projects\` and everything the tool generates (`output\`, `pdf\`) are ignored by `.gitignore`, so proprietary calculations are not committed by accident. Back them up separately, or remove the `projects/*` lines from `.gitignore` if you want to track them in a private repository.
 
 ## The CSV format
+
+Only needed for disciplines that you give a CSV (add `"csv": "calcs/Name.csv"` to the discipline in `project.json`; leave it out for a blank template).
 
 First row is the header. Only `section` and `label` are required; the other columns are optional.
 
@@ -90,7 +102,8 @@ By default the summary lists every live formula plus every row that has a `statu
 | "Python is not installed" | Install Python (see setup) and run `setup.bat` again. |
 | `ERROR: ... line N: 'section' and 'label' must both be filled in` | Fix that CSV line. |
 | "formula gives X but the CSV says Y" | Not an error: the row is kept as a fixed number. Fix the equation or value if it was unexpected. |
-| Prime says it can't open a worksheet / the Include is red | Rebuild so the files are regenerated together; keep all `.mcdx` files in the same folder. |
+| Prime says it can't open a worksheet / the Include is red | Rebuild so the files are regenerated together; keep all `.mcdx` files in the same folder. For a blank-template discipline, rebuilding keeps your file: if that file is the problem, restore a backup or delete it from `output\` and build again for a fresh blank. |
+| The master says "No designated outputs found" for a discipline | In that discipline's worksheet in Prime, select each key result, use *Input/Output > Assign Outputs*, save, and run `build.bat` again. |
 
 Developer notes (file format details, how to extend): `tool\DEVELOPER_NOTES.md`. Coding rules for changing the code: `tool\CODING_RULES.md`.
 Run `run_tests.bat` to check that everything still works after any change.
