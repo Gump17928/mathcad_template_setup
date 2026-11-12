@@ -1,0 +1,23 @@
+{
+  "project": {
+    "name": "Riverside Warehouse",
+    "number": "P-2026-014",
+    "revision": "A",
+    "client": "Example Client",
+    "author": "Test Author",
+    "date": "2026-11-12"
+  },
+  "master_file": "Master",
+  "disciplines": [
+    {"name": "Structural", "key": "STR", "csv": "calcs/Structural.csv", "section_titles": {"BENDING": "Beam bending check"}},
+    {"name": "Mechanical", "key": "MEC", "csv": "calcs/Mechanical.csv", "section_titles": {"SHAFT": "Shaft shear stress"}},
+    {
+      "name": "Electrical",
+      "key": "ELE",
+      "csv": "calcs/Electrical.csv",
+      "section_titles": {"LOAD": "Load", "AMPACITY": "Conductor ampacity", "NEUTRAL": "Neutral size", "EGC": "Equipment grounding conductor", "FILL": "Raceway fill", "VDROP": "Voltage drop"},
+      "summary": ["I_design", "OCPD", "Vd", "Vd_pct"]
+    },
+    {"name": "Civil", "key": "CIV", "csv": "calcs/Civil.csv", "section_titles": {"FOOTING": "Footing bearing pressure"}}
+  ]
+}

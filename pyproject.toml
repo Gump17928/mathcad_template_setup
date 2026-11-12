@@ -1,0 +1,22 @@
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["tool", "tests"]
+extend-exclude = [".venv", "projects"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes (unused names), I import order, B likely bugs, UP modern syntax,
+# SIM simplifiable code, N naming, C90 + PLR the size limits below.
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "N", "C90", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10  # branches per function
+
+[tool.ruff.lint.pylint]
+max-args = 7
+max-statements = 40
+max-branches = 12
+max-returns = 6
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]  # tests add tool/ to sys.path before importing it

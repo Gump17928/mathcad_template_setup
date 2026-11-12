@@ -1,0 +1,6 @@
+section,label,name,value,unit,equation,substituted,reference,notes,status
+FOOTING,Column load,P,450,kN,,,,,
+FOOTING,Footing width,B,2,m,,,,,
+FOOTING,Allowable bearing pressure,q_allow,150,kPa,,,,,
+FOOTING,Bearing pressure,q,,kPa,q = P/B^2,,Concentrically loaded square footing,,
+FOOTING,Utilisation,U,,,U = q/q_allow,,,,

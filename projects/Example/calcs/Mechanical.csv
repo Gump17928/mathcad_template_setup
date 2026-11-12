@@ -1,0 +1,6 @@
+section,label,name,value,unit,equation,substituted,reference,notes,status
+SHAFT,Torque,T,500,N*m,,,,,
+SHAFT,Diameter,d,40,mm,,,,,
+SHAFT,Allowable shear stress,tau_allow,60,MPa,,,,,
+SHAFT,Shear stress,tau,,MPa,tau = 16*T/(3.14159265*d^3),,Solid circular shaft in torsion,,
+SHAFT,Utilisation,U,,,U = tau/tau_allow,,,,

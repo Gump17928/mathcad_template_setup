@@ -1,0 +1,6 @@
+section,label,name,value,unit,equation,substituted,reference,notes,status
+BENDING,Design load,w,12,kN/m,,,,,
+BENDING,Span,L,6,m,,,,,
+BENDING,Moment capacity,M_Rd,80,kN*m,,,,,
+BENDING,Design moment,M_Ed,,kN*m,M_Ed = w*L^2/8,,Simply supported beam,,
+BENDING,Utilisation,U,,,U = M_Ed/M_Rd,,,,

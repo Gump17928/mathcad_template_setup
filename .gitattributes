@@ -1,0 +1,8 @@
+* text=auto
+*.bat text eol=crlf
+
+# Mathcad and other packages are zip files: never touch their line endings
+*.mcdx binary
+*.mctx binary
+*.XamlPackage binary
+*.pdf binary
