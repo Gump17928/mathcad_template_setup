@@ -13,8 +13,11 @@ There are two ways to fill a discipline, and you can mix them in one project:
 ## First-time setup (once per PC)
 
 1. Install **Python 3.10 or newer** if you don't have it: <https://www.python.org/downloads/>
-   (tick *"Add python.exe to PATH"* on the first installer screen).
-2. Double-click **`setup.bat`**. It creates a private environment and installs what it needs (internet required, ~1 minute).
+   (tick *"Add python.exe to PATH"* on the first installer screen). It does not need to be on the PATH, and the Microsoft Store is not needed.
+2. Double-click **`setup.bat`**. It looks for Python (the `py` launcher, the PATH, the Windows registry, the usual install folders, a `python` folder next to the file), creates a private environment and installs what it needs (internet required, ~1 minute).
+   - **Python in an unusual place?** If it isn't found, `setup.bat` asks you to type the path to `python.exe` (or its folder) and remembers it in `python_path.txt`. You can also run `setup.bat "D:\Tools\Python"` or set the `MATHCAD_PYTHON` environment variable.
+   - It needs a **full** Python install, not the "embeddable" zip (that one has no `venv`/`pip`).
+   - If the project folder was copied from another PC, `setup.bat` rebuilds the `.venv` folder automatically.
 
 Mathcad Prime must be installed to open the results, and for `check_in_prime.bat` and `make_pdfs.bat`.
 Building the worksheets does not need Prime.
@@ -99,7 +102,9 @@ By default the summary lists every live formula plus every row that has a `statu
 | Message | Fix |
 |---|---|
 | "Please double-click setup.bat first" | Run `setup.bat` once. |
-| "Python is not installed" | Install Python (see setup) and run `setup.bat` again. |
+| "Python is not installed" / "No Python was chosen" | Install Python (see setup), or run `setup.bat "full\path\to\python.exe"` if it is installed somewhere unusual. |
+| "That did not work: ... is not Python 3.10 or newer" | That path is an older Python, or not Python at all. Point it at a 3.10+ install. |
+| "The packages did not install" | `setup.bat` needs internet. Behind a company proxy, set the `HTTPS_PROXY` environment variable or ask IT; pip must be allowed to reach pypi.org. |
 | `ERROR: ... line N: 'section' and 'label' must both be filled in` | Fix that CSV line. |
 | "formula gives X but the CSV says Y" | Not an error: the row is kept as a fixed number. Fix the equation or value if it was unexpected. |
 | Prime says it can't open a worksheet / the Include is red | Rebuild so the files are regenerated together; keep all `.mcdx` files in the same folder. For a blank-template discipline, rebuilding keeps your file: if that file is the problem, restore a backup or delete it from `output\` and build again for a fresh blank. |

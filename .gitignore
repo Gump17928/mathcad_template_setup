@@ -1,5 +1,6 @@
 # --- Python ---
 .venv/
+python_path.txt
 __pycache__/
 *.pyc
 .ruff_cache/
