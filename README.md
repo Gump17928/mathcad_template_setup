@@ -97,6 +97,27 @@ By default the summary lists every live formula plus every row that has a `statu
 - Links between files (master to disciplines) use relative names, so keep the `output` folder together.
 - Mathcad Express can open and calculate these worksheets; it shows `= ?` for premium functions only.
 
+## Using an older Mathcad Prime (for example Prime 10)
+
+Every worksheet this tool writes is stamped as made by a particular Prime version, and its settings use what that
+version knows. The tool ships with a **Prime 12** template. A different Prime may refuse files written in another
+version's format, so build the project from a template made by that Prime. It takes five minutes, once per version:
+
+1. **On the PC with the other Prime** (Prime 10, say): start a new worksheet, type a line of text in it, then add a
+   line of text to its **header** and its **footer** (double-click the top and bottom margins, or *Document* tab >
+   *Headers and Footers*). Save it as, for example, `sample.mcdx`. Any small worksheet is fine, but it must have all three.
+2. Copy `sample.mcdx` to the PC where you build worksheets (or do step 3 on the same PC if it has this tool and Python).
+3. **Drag `sample.mcdx` onto `capture_skeleton.bat`.** It reads the Prime version from the file, saves
+   `tool\skeleton\prime10.mcdx` (author names removed) and prints the version stamps of each template.
+   If the sample is unusable it says why (for example "the sample has no header and footer").
+4. In the project's `project.json` add `"prime_version": "10"` (the wizard asks for it once a second template exists), then run `build.bat`.
+
+If Prime 10 still refuses a worksheet, save one small worksheet from it that uses the feature that fails (a tag, a link,
+an area, an include, a designated input/output) and use it to compare with what this tool writes (see `tool\DEVELOPER_NOTES.md`).
+Prime 10 predates some Prime 11/12 features. The tool writes tags, internal links, areas, includes and designated inputs/outputs, which should all exist in Prime 10 (tags and links arrived in Prime 9, links between files in Prime 10), but that has **not been tested on a real Prime 10**.
+
+Commit `tool\skeleton\prime10.mcdx` to the repository so everyone else can build for Prime 10 without repeating the capture.
+
 ## Troubleshooting
 
 | Message | Fix |

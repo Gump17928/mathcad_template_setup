@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+from prime_skeleton import DEFAULT_VERSION, available_versions
 from project_io import PROJECT_FILE, default_file_name, default_key
 
 
@@ -39,6 +40,7 @@ class ProjectConfig:
     info: ProjectInfo
     master_file: str
     disciplines: list[Discipline]
+    prime_version: str = DEFAULT_VERSION  # which skeleton to build from, e.g. "10" for Mathcad Prime 10
 
 
 def load_project(folder: Path) -> ProjectConfig:
@@ -70,4 +72,10 @@ def load_project(folder: Path) -> ProjectConfig:
         seen_keys.add(discipline.key)
         seen_files.add(discipline.file)
         disciplines.append(discipline)
-    return ProjectConfig(info, raw.get("master_file", "Master"), disciplines)
+    prime_version = str(raw.get("prime_version", DEFAULT_VERSION))
+    if prime_version not in available_versions():
+        have = ", ".join(available_versions())
+        raise ProjectError(
+            f"{PROJECT_FILE}: prime_version \"{prime_version}\" has no skeleton (available: {have}). To build for "
+            f"another Prime version, save a worksheet from it and run capture_skeleton.bat - see the README.")
+    return ProjectConfig(info, raw.get("master_file", "Master"), disciplines, prime_version)

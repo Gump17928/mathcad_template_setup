@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import math
 import re
-import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -26,14 +25,8 @@ from xml.sax.saxutils import escape, quoteattr
 
 from formula import Neg, Node, Num, Parens, Var, parse
 from opc import CONTENT_TYPES_PART, XML_DECLARATION, Relationship, new_relationship_id, relationships_xml, write_package
+from prime_skeleton import DEFAULT_VERSION, load_skeleton
 from rich_text import STYLES, WPF_NS, RichText, Run, as_paragraphs, text_height, xaml_package
-
-SKELETON = Path(__file__).parent / "skeleton" / "skeleton.mcdx"
-# Parts copied unchanged from the skeleton.
-SKELETON_PARTS = (
-    CONTENT_TYPES_PART, "_rels/.rels", "docProps/app.xml", "docProps/core.xml",
-    "mathcad/settings/presentation.xml", "mathcad/settings/calculation.xml",
-)
 
 # XML namespaces
 WS_NS = "http://schemas.mathsoft.com/worksheet50"
@@ -197,14 +190,15 @@ def empty_results_xml(result_count: int) -> str:
             f"{entries}</resultsList>")
 
 
-def cached_worksheet_xml(regions: list[str]) -> str:
-    """The cached copy of an included worksheet's definitions (mathcad/include/includeN.xml)."""
+def cached_worksheet_xml(regions: list[str], behavior: dict[str, str]) -> str:
+    """The cached copy of an included worksheet's definitions (mathcad/include/includeN.xml).
+    `behavior` is the calculationBehavior attributes to write; an older Prime rejects settings it does not know."""
+    attributes = " ".join(f'{name}="{value}"' for name, value in behavior.items())
     return (
         f'{XML_DECLARATION}<cachedWorksheet xmlns:ml="{ML_NS}" xmlns:u="{UNITS_NS}" xmlns="{WS_NS}">'
         f'<regions>{"".join(regions)}</regions>'
         f'<calculation xmlns="{CALCULATION_NS}"><builtInVariables />'
-        '<calculationBehavior exact-boolean="true" units-in-symbolics="true" constants-in-symbolics="true" '
-        'symbolic-engine="axiom" /></calculation></cachedWorksheet>'
+        f'<calculationBehavior {attributes} /></calculation></cachedWorksheet>'
     )
 
 
@@ -218,8 +212,10 @@ def content_types_with_includes(skeleton_xml: str, include_parts: list[str]) -> 
 # ---------------------------------------------------------------- sheet
 @dataclass
 class Sheet:
-    """One worksheet under construction. Content is added in reading order; `y` tracks the free space below it."""
+    """One worksheet under construction. Content is added in reading order; `y` tracks the free space below it.
+    `prime_version` selects the skeleton (see prime_skeleton.py) whose version stamps and settings are written."""
 
+    prime_version: str = DEFAULT_VERSION
     regions: list[str] = field(default_factory=list)
     header_regions: list[str] = field(default_factory=list)
     footer_regions: list[str] = field(default_factory=list)
@@ -385,7 +381,8 @@ class Sheet:
                 f'left="{LEFT_MARGIN}"><math resultRef="{self.next_result_id()}">{body}</math></region>'
                 for i, body in enumerate(source.definitions)
             ]
-            self.includes[part] = cached_worksheet_xml(cached).encode("utf-8")
+            behavior = load_skeleton(self.prime_version).include_behavior()
+            self.includes[part] = cached_worksheet_xml(cached, behavior).encode("utf-8")
             relationship = Relationship(new_relationship_id(), REL_INCLUDE, part)
             self.relationships.append(relationship)
             item_reference = f' item-idref="{relationship.id}"'
@@ -405,8 +402,7 @@ class Sheet:
     # -- writing
     def package_parts(self) -> dict[str, bytes]:
         """Every part of the .mcdx package, by part name."""
-        with zipfile.ZipFile(SKELETON) as skeleton:
-            parts = {name: skeleton.read(name) for name in SKELETON_PARTS}
+        parts = dict(load_skeleton(self.prime_version).parts)
         content_types = content_types_with_includes(parts[CONTENT_TYPES_PART].decode("utf-8-sig"), list(self.includes))
         parts[CONTENT_TYPES_PART] = content_types.encode("utf-8")
 

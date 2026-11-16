@@ -34,7 +34,7 @@ from page_parts import (
     add_header_and_footer,
     add_title_block,
 )
-from project_config import Discipline, ProjectConfig, ProjectError, ProjectInfo, load_project
+from project_config import Discipline, ProjectConfig, ProjectError, load_project
 from project_io import resolve_project
 from rich_text import Run, text_height
 
@@ -137,10 +137,10 @@ def page_note(pages: dict[str, int], tag: str) -> str:
     return f"   (page {pages.get(tag, MISSING_PAGE)})"
 
 
-def build_discipline(d: Discipline, model: DisciplineModel, info: ProjectInfo, master_file: str,
-                     pages: dict[str, int]) -> Sheet:
+def build_discipline(d: Discipline, model: DisciplineModel, cfg: ProjectConfig, pages: dict[str, int]) -> Sheet:
     """`pages` maps tag -> page number found by an earlier layout pass (empty on the first pass)."""
-    sheet = Sheet()
+    info, master_file = cfg.info, cfg.master_file
+    sheet = Sheet(prime_version=cfg.prime_version)
     add_header_and_footer(sheet, info, d.name)
     add_title_block(sheet, info, f"{d.name} Calculations", info.name)
 
@@ -168,7 +168,7 @@ def build_master(cfg: ProjectConfig, models: dict[str, DisciplineModel], pages_b
     A discipline in `models` came from a CSV; any other is a blank template whose calculations were written in
     Prime, so its summary lines are the outputs designated in its file (`outputs_by_file`).
     """
-    sheet = Sheet()
+    sheet = Sheet(prime_version=cfg.prime_version)
     add_header_and_footer(sheet, cfg.info, "Master")
     add_title_block(sheet, cfg.info, cfg.info.name, "Engineering Calculation Package")
     sheet.page_break()
@@ -220,7 +220,7 @@ def lay_out_discipline_sheets(cfg: ProjectConfig, models: dict[str, DisciplineMo
     for _ in range(2):
         for d in cfg.disciplines:
             if d.file in models:
-                sheet = build_discipline(d, models[d.file], cfg.info, cfg.master_file, pages_by_file.get(d.file, {}))
+                sheet = build_discipline(d, models[d.file], cfg, pages_by_file.get(d.file, {}))
                 pages_by_file[d.file] = sheet.tags
                 sheets[d.file] = sheet
     return sheets, pages_by_file

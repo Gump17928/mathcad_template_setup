@@ -76,6 +76,11 @@ class NewProjectBuildsTest(unittest.TestCase):
         process, civil = load_project(self.folder).disciplines
         self.assertEqual((process.csv, civil.csv), (None, "c.csv"))
 
+    def test_wizard_records_the_prime_version(self):
+        create_project(self.folder, INFO, discipline_entries(["Structural"]), prime_version="12")
+        self.assertEqual(json.loads((self.folder / "project.json").read_text(encoding="utf-8"))["prime_version"], "12")
+        self.assertEqual(load_project(self.folder).prime_version, "12")
+
 
 class HandWrittenDisciplineTest(unittest.TestCase):
     """A discipline with no CSV: blank template first, then the engineer's own file is kept and read."""

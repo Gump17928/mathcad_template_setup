@@ -21,7 +21,7 @@ from page_parts import (
     add_header_and_footer,
     add_title_block,
 )
-from project_config import Discipline, ProjectConfig, ProjectInfo
+from project_config import Discipline, ProjectConfig
 from rich_text import Run
 
 BLANK_SECTION_TITLE = "Calculations"
@@ -35,9 +35,10 @@ CALCULATION_HINT = ("Write this discipline's calculations here (delete this note
 SUMMARY_HINT = "Key results for this discipline can be listed here."
 
 
-def build_blank_discipline(d: Discipline, info: ProjectInfo, master_file: str) -> Sheet:
+def build_blank_discipline(d: Discipline, cfg: ProjectConfig) -> Sheet:
     """Title block, contents, an empty tagged calculation area and a summary heading."""
-    sheet = Sheet()
+    info, master_file = cfg.info, cfg.master_file
+    sheet = Sheet(prime_version=cfg.prime_version)
     add_header_and_footer(sheet, info, d.name)
     add_title_block(sheet, info, f"{d.name} Calculations", info.name)
 
@@ -78,7 +79,7 @@ def write_blank_discipline(d: Discipline, cfg: ProjectConfig, out: Path) -> tupl
     if path.exists():
         lines = [f"{d.name}  (no CSV): kept existing {path.name} - not overwritten"]
     else:
-        build_blank_discipline(d, cfg.info, cfg.master_file).save(path)
+        build_blank_discipline(d, cfg).save(path)
         lines = [f"{d.name}  (no CSV): created blank template {path.name}"]
     try:
         outputs = select_outputs(read_designated_outputs(path), d.summary)

@@ -7,6 +7,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from prime_skeleton import DEFAULT_VERSION, available_versions
 from project_io import PROJECTS, default_key
 
 STANDARD_DISCIPLINES = ["Structural", "Mechanical", "Electrical", "Civil"]
@@ -84,14 +85,25 @@ def discipline_entries(names: list[str], starter_csv: bool = False) -> list[dict
     return entries
 
 
-def create_project(folder: Path, info: dict, disciplines: list[dict]) -> None:
+def ask_prime_version() -> str:
+    """Which Mathcad Prime version the worksheets are for. Only asked when more than one skeleton is installed."""
+    versions = available_versions()
+    if len(versions) < 2:
+        return DEFAULT_VERSION
+    print(f"\nMathcad Prime versions this tool can build for: {', '.join(versions)}")
+    while (answer := ask("Which Prime version will open these worksheets?", versions[0])) not in versions:
+        print(f"  please type one of: {', '.join(versions)}")
+    return answer
+
+
+def create_project(folder: Path, info: dict, disciplines: list[dict], prime_version: str = DEFAULT_VERSION) -> None:
     """Write project.json, and a starter CSV for each discipline that has a `csv` path, into a new folder."""
     folder.mkdir(parents=True)
     for d in disciplines:
         if "csv" in d:
             (folder / d["csv"]).parent.mkdir(exist_ok=True)
             (folder / d["csv"]).write_text(STARTER_CSV, encoding="utf-8")
-    config = {"project": info, "master_file": "Master", "disciplines": disciplines}
+    config = {"project": info, "prime_version": prime_version, "master_file": "Master", "disciplines": disciplines}
     (folder / "project.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 
@@ -103,11 +115,12 @@ def main() -> None:
     if not names:
         sys.exit("\nNo disciplines chosen - nothing created.")
     starter_csv = ask_starter_csv()
+    prime_version = ask_prime_version()
 
     folder = PROJECTS / folder_name(info["number"] if info["number"] != DEFAULT_PROJECT_NUMBER else info["name"])
     if folder.exists():
         sys.exit(f"\nA project folder named '{folder.name}' already exists. Pick a different project number or name.")
-    create_project(folder, info, discipline_entries(names, starter_csv))
+    create_project(folder, info, discipline_entries(names, starter_csv), prime_version)
 
     print(f"\nCreated {folder}")
     print("\nNext steps:")

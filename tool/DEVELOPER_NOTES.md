@@ -20,7 +20,8 @@ Read `CODING_RULES.md` first. Run `run_tests.bat` before and after every change.
 | `verify_in_prime.py`, `export_pdf.py` | Command-line scripts built on `prime_com`. |
 | `project_io.py` | Finding the project folder; naming defaults shared by the wizard and the builder. |
 | `new_project.py` | The wizard behind `new_project.bat`. |
-| `skeleton/skeleton.mcdx` | The settings and document-property parts copied into every generated worksheet. Taken from a Prime 12.0.1.0 worksheet, reduced to the six parts the generator reads, with neutral author properties. |
+| `prime_skeleton.py` | Loads and captures the per-Prime-version skeletons (`skeleton/prime<major>.mcdx`); `capture_skeleton.py` is its command line. |
+| `skeleton/prime12.mcdx` | The settings and document-property parts copied into every generated worksheet. Taken from a Prime 12.0.1.0 worksheet, reduced to the six parts the generator reads, with neutral author properties. Other versions are added with `capture_skeleton.bat`. |
 | `reference/` | Local only (git-ignored): the probe worksheet the XML shapes were taken from, and PTC's sample worksheet. Not published because they carry personal metadata and third-party content. If you need to learn a new XML shape, save a small worksheet from Prime that uses the feature and unzip it. |
 
 Dependency order: `formula`, `opc` -> `rich_text` -> `mcdx_build` -> `csv_import`, `project_config` -> `page_parts` -> `blank_template` -> `build_template`.
@@ -60,6 +61,9 @@ Facts learned the hard way (each is also commented next to the code that depends
 - Unit names accepted by Prime 12.0.1.0 were tested; the list is `VALID_UNITS` in `csv_import.py`. Add to it only after testing in Prime
   (e.g. `kVA`, `kohm`, `kJ`, `kWh`, `%`, `AWG` are rejected).
 - Prime keeps running for a few seconds after the last worksheet closes; files stay locked until it exits.
+- A Prime that is still starting can answer `Open()` with nothing even though it goes on to open the file, so `prime_com` retries.
+- `Open()` also returns nothing for a Windows short (8.3) path such as `C:\Users\FORRES~1\...` (it opens the file anyway). `prime_com` converts paths to long form first.
+- Prime 10 and older: only a skeleton saved by that Prime is known to give acceptable version stamps and settings. The include cache's `calculationBehavior` is limited to attributes the skeleton's own `calculation.xml` has. What else differs between versions is **unverified** (no Prime 10 was available when this was written); compare a probe worksheet from that Prime with what the generator writes.
 - Use `.venv\Scripts\python.exe` (or `python -m pip`) rather than a bare `pip`; on some PCs they point at different Pythons.
 
 ## Not yet done
